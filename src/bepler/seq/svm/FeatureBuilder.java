@@ -144,6 +144,24 @@ public class FeatureBuilder {
 		return binary;
 	}
 	
+	public double[] featurizeAsDouble(String s){
+		if(s == null){
+			throw new NullPointerException();
+		}
+		if(s.length() != seqLen){
+			throw new RuntimeException("FeatureBuilder: "+this+" requires strings of length "+seqLen+" but was "+s.length());
+		}
+		double[] binary = new double[features.length];
+		for( int i = 0 ; i < features.length ; ++i ){
+			if(features[i].containedBy(s)){
+				binary[i] = 1;
+			}else{
+				binary[1] = 0;
+			}
+		}
+		return binary;
+	}
+	
 	
 
 }

@@ -4,6 +4,10 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Random;
+import java.util.concurrent.Callable;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 
 import arnaudsj.java.libsvm.svm;
 import arnaudsj.java.libsvm.svm_model;
@@ -18,6 +22,7 @@ public class SeqSVMTrainer {
 	private final FeatureBuilder builder;
 	private final double[] eps;
 	private final double[] cs;
+	private boolean verbose = false;
 	
 	public SeqSVMTrainer(int seqLen, int[] kmerLens, char[] alphabet, double[] eps, double[] c){
 		builder = new FeatureBuilder(seqLen, kmerLens, alphabet);
@@ -31,6 +36,10 @@ public class SeqSVMTrainer {
 		this.cs = c.clone();
 	}
 	
+	public void setVerbose(boolean verbose){
+		this.verbose = verbose;
+	}
+	
 	private static double[] asArray(List<Double> vals){
 		double[] array = new double[vals.size()];
 		for( int i = 0 ; i < array.length ; ++i ){
@@ -39,11 +48,11 @@ public class SeqSVMTrainer {
 		return array;
 	}
 	
-	private static class StringValue{
-		public String seq;
+	private static class FeaturesValue{
+		public svm_node[] features;
 		public double val;
-		public StringValue(String seq, double val){
-			this.seq = seq; this.val = val;
+		public FeaturesValue(FeatureBuilder builder, String seq, double val){
+			this.features = extractFeatures(builder, seq); this.val = val;
 		}
 	}
 	
@@ -67,25 +76,60 @@ public class SeqSVMTrainer {
 		return nodes;
 	}
 	
-	public SeqSVMModel train(List<String> seqs, List<Double> vals, int k, Random random, double terminationEpsilon){
+	public SeqSVMModel train(final List<String> seqs, final List<Double> vals, int k, Random random, double terminationEpsilon){
 		if(seqs.size() != vals.size()){
 			throw new RuntimeException("Sequences list and values list must be of the same size.");
 		}
 		
-		List<StringValue> shuffle = new ArrayList<StringValue>();
+		ExecutorService exec = Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors());
+		
+		if(verbose){
+			System.err.println("Extracting sequence features.");
+		}
+		final List<FeaturesValue> shuffle = new ArrayList<FeaturesValue>();
+		List<Callable<Object>> tasks = new ArrayList<Callable<Object>>();
 		for( int i = 0 ; i < seqs.size() ; ++i ){
-			shuffle.add(new StringValue(seqs.get(i), vals.get(i)));
+			final int index = i;
+			tasks.add(new Callable<Object>(){
+
+				@Override
+				public Object call() throws Exception {
+					FeaturesValue feature = new FeaturesValue(builder, seqs.get(index), vals.get(index));
+					synchronized(shuffle){
+						shuffle.add(feature);
+					}
+					return null;
+				}
+				
+			});
+		}
+		try {
+			exec.invokeAll(tasks);
+		} catch (InterruptedException e) {
+			//bad things
+			throw new Error(e);
 		}
 		Collections.shuffle(shuffle, random);
 		
 		//build the cross-validation sets
+		if(verbose){
+			System.err.println("Building cross validation sets.");
+		}
 		List<CrossValidationSet> crossValSets = this.buildCrossValidationSets(k,shuffle);
 		
 		//grid search the parameters in parallel
+		if(verbose){
+			System.err.println("Grid searching parameters.");
+		}
 		GridSearch search = new GridSearchParallel(eps, cs, terminationEpsilon, crossValSets);
 		svm_parameter param = search.search();
 		
 		//build a model using the best parameters and all the given data
+		if(verbose){
+			System.err.println("Generating model with parameters: ");
+			System.err.println("Epsilon = "+param.p);
+			System.err.println("C = "+param.C);
+		}
 		svm_problem prob = new svm_problem();
 		prob.l = seqs.size();
 		prob.y = asArray(vals);
@@ -97,36 +141,36 @@ public class SeqSVMTrainer {
 	}
 
 	private List<CrossValidationSet> buildCrossValidationSets(
-			int k,
-			List<StringValue> shuffle
+			final int k,
+			final List<FeaturesValue> shuffle
 			) {
 		
-		int blockSize = shuffle.size() / k;
-		List<CrossValidationSet> crossValSets = new ArrayList<CrossValidationSet>();
+		final int blockSize = shuffle.size() / k;
+		final List<CrossValidationSet> crossValSets = new ArrayList<CrossValidationSet>();
 		for( int i = 0 ; i < k ; ++i ){
 			int start = blockSize * i;
 			int end = i == k-1 ? shuffle.size() : start + blockSize;
 
-			List<String> testSet = new ArrayList<String>();
+			List<svm_node[]> testSet = new ArrayList<svm_node[]>();
 			List<Double> testValues = new ArrayList<Double>();
-			List<String> trainingSet = new ArrayList<String>();
+			List<svm_node[]> trainingSet = new ArrayList<svm_node[]>();
 			List<Double> trainingValues = new ArrayList<Double>();
 			
 			for( int j = 0 ; j < shuffle.size() ; ++j ){
-				StringValue sv = shuffle.get(j);
+				FeaturesValue sv = shuffle.get(j);
 				if( j >= start && j < end ){
-					trainingSet.add(sv.seq);
-					trainingValues.add(sv.val);
-				}else{
-					testSet.add(sv.seq);
+					testSet.add(sv.features);
 					testValues.add(sv.val);
+				}else{
+					trainingSet.add(sv.features);
+					trainingValues.add(sv.val);
 				}
 			}
 			
 			CrossValidationSet set = new CrossValidationSet(
-					generateFeatures(builder, trainingSet),
+					trainingSet.toArray(new svm_node[trainingSet.size()][]),
 					asArray(trainingValues),
-					generateFeatures(builder, testSet),
+					testSet.toArray(new svm_node[testSet.size()][]),
 					asArray(testValues)
 					);
 			

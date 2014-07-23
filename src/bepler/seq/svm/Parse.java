@@ -90,8 +90,32 @@ public class Parse {
 		}
 	}
 	
+	private String arrayToString(double[] array){
+		String s = "";
+		for(double d : array){
+			s += d + " ";
+		}
+		return s;
+	}
+	
+	private String arrayToString(int[] array){
+		String s = "";
+		for(int i : array){
+			s += i + " ";
+		}
+		return s;
+	}
+	
 	public void execute(){
+		System.err.println("Building model for kmers: "+arrayToString(kmers));
+		System.err.println("Using epsilons: "+arrayToString(ps));
+		System.err.println("Using Cs: "+arrayToString(cs));
+		System.err.println("Using K: "+k);
+		System.err.println("Using terminal epsilon: "+term);
+		System.err.println("Sequence length: "+seqLen);
+		System.err.println("Total sequences: "+seqs.size());
 		SeqSVMTrainer trainer = new SeqSVMTrainer(seqLen, kmers, alphabet, ps, cs);
+		trainer.setVerbose(true);
 		SeqSVMModel model = trainer.train(seqs, vals, k, new Random(), term);
 		model.write(System.out);
 	}

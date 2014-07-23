@@ -3,11 +3,10 @@ package bepler.seq.svm;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.Callable;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.util.concurrent.TimeUnit;
-
 import arnaudsj.java.libsvm.svm;
 import arnaudsj.java.libsvm.svm_model;
 import arnaudsj.java.libsvm.svm_node;
@@ -21,7 +20,6 @@ public class GridSearchParallel implements GridSearch{
 	private final double term;
 	private final List<CrossValidationSet> crossValSets;
 	private final ExecutorService exec;
-	private boolean searched = false;
 	
 	public GridSearchParallel(double[] ps, double[] cs, double term, List<CrossValidationSet> crossValSets){
 		this.ps = ps.clone();
@@ -65,35 +63,33 @@ public class GridSearchParallel implements GridSearch{
 	
 	private Map<svm_parameter, Double> computeScores(){
 		final Map<svm_parameter, Double> scores = new ConcurrentHashMap<svm_parameter, Double>();
+		List<Callable<Object>> tasks = new ArrayList<Callable<Object>>();
 		for( final double e : ps ){
 			for( final double c : cs	){
-				exec.execute(new Runnable(){
+				tasks.add(new Callable<Object>(){
 
 					@Override
-					public void run() {
+					public Object call() throws Exception {
 						svm_parameter param = initParam(e, c, term);
 						double score = crossValidate(crossValSets, param);
 						scores.put(param, score);
+						return null;
 					}
 					
 				});
 			}
 		}
-		exec.shutdown();
 		try {
-			exec.awaitTermination(0, TimeUnit.NANOSECONDS);
+			exec.invokeAll(tasks);
 		} catch (InterruptedException e1) {
-			e1.printStackTrace();
+			//bad things
+			throw new Error(e1);
 		}
 		return scores;
 	}
 
 	@Override
 	public svm_parameter search() {
-		if(searched){
-			throw new RuntimeException("This GridSearch has already been searched. A new one must be built for each future search.");
-		}
-		searched = true;
 		Map<svm_parameter, Double> scores = this.computeScores();
 		svm_parameter best = null;
 		double bestScore = Double.POSITIVE_INFINITY;

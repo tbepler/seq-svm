@@ -1,5 +1,6 @@
 package bepler.seq.svm;
 
+import java.io.PrintStream;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -7,8 +8,6 @@ import java.util.Random;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.util.concurrent.TimeUnit;
-
 import arnaudsj.java.libsvm.svm;
 import arnaudsj.java.libsvm.svm_model;
 import arnaudsj.java.libsvm.svm_node;
@@ -75,68 +74,77 @@ public class SeqSVMTrainer {
 		}
 		return nodes;
 	}
-	
+
 	public SeqSVMModel train(final List<String> seqs, final List<Double> vals, int k, Random random, double terminationEpsilon){
 		if(seqs.size() != vals.size()){
 			throw new RuntimeException("Sequences list and values list must be of the same size.");
 		}
-		
-		ExecutorService exec = Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors());
-		
-		if(verbose){
-			System.err.println("Extracting sequence features.");
-		}
-		final List<FeaturesValue> shuffle = new ArrayList<FeaturesValue>();
-		List<Callable<Object>> tasks = new ArrayList<Callable<Object>>();
-		for( int i = 0 ; i < seqs.size() ; ++i ){
-			final int index = i;
-			tasks.add(new Callable<Object>(){
+		//redirect stdout to stderr
+		PrintStream sout = System.out;
+		System.setOut(System.err);
 
-				@Override
-				public Object call() throws Exception {
-					FeaturesValue feature = new FeaturesValue(builder, seqs.get(index), vals.get(index));
-					synchronized(shuffle){
-						shuffle.add(feature);
+		try{
+			ExecutorService exec = Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors());
+
+			if(verbose){
+				System.err.println("Running using "+Runtime.getRuntime().availableProcessors()+" treads.");
+				System.err.println("Extracting sequence features.");
+			}
+			final List<FeaturesValue> shuffle = new ArrayList<FeaturesValue>();
+			List<Callable<Object>> tasks = new ArrayList<Callable<Object>>();
+			for( int i = 0 ; i < seqs.size() ; ++i ){
+				final int index = i;
+				tasks.add(new Callable<Object>(){
+
+					@Override
+					public Object call() throws Exception {
+						FeaturesValue feature = new FeaturesValue(builder, seqs.get(index), vals.get(index));
+						synchronized(shuffle){
+							shuffle.add(feature);
+						}
+						return null;
 					}
-					return null;
-				}
-				
-			});
+
+				});
+			}
+			try {
+				exec.invokeAll(tasks);
+			} catch (InterruptedException e) {
+				//bad things
+				throw new Error(e);
+			}
+			Collections.shuffle(shuffle, random);
+
+			//build the cross-validation sets
+			if(verbose){
+				System.err.println("Building cross validation sets.");
+			}
+			List<CrossValidationSet> crossValSets = this.buildCrossValidationSets(k,shuffle);
+
+			//grid search the parameters in parallel
+			if(verbose){
+				System.err.println("Grid searching parameters.");
+			}
+			GridSearch search = new GridSearchParallel(eps, cs, terminationEpsilon, crossValSets);
+			svm_parameter param = search.search();
+
+			//build a model using the best parameters and all the given data
+			if(verbose){
+				System.err.println("Generating model with parameters: ");
+				System.err.println("Epsilon = "+param.p);
+				System.err.println("C = "+param.C);
+			}
+			svm_problem prob = new svm_problem();
+			prob.l = seqs.size();
+			prob.y = asArray(vals);
+			prob.x = generateFeatures(builder, seqs);
+			svm_model model = svm.svm_train(prob, param);
+
+			return new SeqSVMModel(builder, model);
+		}finally{
+			//restore system.out
+			System.setOut(sout);
 		}
-		try {
-			exec.invokeAll(tasks);
-		} catch (InterruptedException e) {
-			//bad things
-			throw new Error(e);
-		}
-		Collections.shuffle(shuffle, random);
-		
-		//build the cross-validation sets
-		if(verbose){
-			System.err.println("Building cross validation sets.");
-		}
-		List<CrossValidationSet> crossValSets = this.buildCrossValidationSets(k,shuffle);
-		
-		//grid search the parameters in parallel
-		if(verbose){
-			System.err.println("Grid searching parameters.");
-		}
-		GridSearch search = new GridSearchParallel(eps, cs, terminationEpsilon, crossValSets);
-		svm_parameter param = search.search();
-		
-		//build a model using the best parameters and all the given data
-		if(verbose){
-			System.err.println("Generating model with parameters: ");
-			System.err.println("Epsilon = "+param.p);
-			System.err.println("C = "+param.C);
-		}
-		svm_problem prob = new svm_problem();
-		prob.l = seqs.size();
-		prob.y = asArray(vals);
-		prob.x = generateFeatures(builder, seqs);
-		svm_model model = svm.svm_train(prob, param);
-		
-		return new SeqSVMModel(builder, model);
 		
 	}
 

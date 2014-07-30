@@ -7,6 +7,7 @@ import java.util.concurrent.Callable;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+
 import arnaudsj.java.libsvm.svm;
 import arnaudsj.java.libsvm.svm_model;
 import arnaudsj.java.libsvm.svm_node;
@@ -91,6 +92,7 @@ public class GridSearchParallel implements GridSearch{
 
 	@Override
 	public svm_parameter search() {
+		//build the grid search score table
 		Map<svm_parameter, Double> scores = this.computeScores();
 		//picks the parameters that produce a model with the lowest
 		//average error

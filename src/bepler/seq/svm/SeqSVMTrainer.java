@@ -87,7 +87,7 @@ public class SeqSVMTrainer {
 			ExecutorService exec = Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors());
 
 			if(verbose){
-				System.err.println("Running using "+Runtime.getRuntime().availableProcessors()+" treads.");
+				System.err.println("Running on "+Runtime.getRuntime().availableProcessors()+" cores.");
 				System.err.println("Extracting sequence features.");
 			}
 			final List<FeaturesValue> shuffle = new ArrayList<FeaturesValue>();

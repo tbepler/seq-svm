@@ -45,6 +45,7 @@ public class GridSearchParallel implements GridSearch{
 	private double testModel(svm_model model, double[] testValues, svm_node[][] testSet){
 		double score = 0;
 		for( int i = 0 ; i < testValues.length ; ++i ){
+			//the error is the difference between the predicted value and the actual value
 			double err = Math.abs(svm.svm_predict(model, testSet[i]) - testValues[i]);
 			score += err;
 		}
@@ -91,6 +92,8 @@ public class GridSearchParallel implements GridSearch{
 	@Override
 	public svm_parameter search() {
 		Map<svm_parameter, Double> scores = this.computeScores();
+		//picks the parameters that produce a model with the lowest
+		//average error
 		svm_parameter best = null;
 		double bestScore = Double.POSITIVE_INFINITY;
 		for(svm_parameter param : scores.keySet()){

@@ -1,6 +1,7 @@
 package bepler.seq.svm;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.Callable;
@@ -30,17 +31,45 @@ public class GridSearchParallel implements GridSearch{
 		this.exec = Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors());
 	}
 	
-	private double crossValidate(List<CrossValidationSet> sets, svm_parameter param){
-		double score = 0;
-		for(CrossValidationSet set : sets){
-			svm_problem prob = new svm_problem();
-			prob.l = set.trainValues.length;
-			prob.y = set.trainValues;
-			prob.x = set.trainSet;
-			svm_model model = svm.svm_train(prob, param);
-			score += this.testModel(model, set.testValues, set.testSet);
+	private double crossValidate(List<CrossValidationSet> sets, final svm_parameter param){
+		final Collection<Double> scores = new ArrayList<Double>();
+		Collection<Callable<Object>> tasks = new ArrayList<Callable<Object>>();
+		for(final CrossValidationSet set : sets){
+			tasks.add(new Callable<Object>(){
+				@Override public Object call() throws Exception {
+					svm_problem prob = new svm_problem();
+					prob.l = set.trainValues.length;
+					prob.y = set.trainValues;
+					prob.x = set.trainSet;
+					svm_model model = svm.svm_train(prob, param);
+					synchronized(scores){
+						scores.add(testModel(model, set.testValues, set.testSet));
+					}
+					return null;
+				}
+			});
 		}
-		return score / (double) sets.size();
+		
+		try {
+			exec.invokeAll(tasks);
+		} catch (InterruptedException e) {
+			//bad things
+			throw new Error(e);
+		}
+		
+		if(scores.size() != sets.size()){
+			//an error occurred in at least one of the model training threads
+			System.err.println("Warning: an error occurred while cross validating parameters: Epsilon="+param.p+" C="+param.C
+					+". Only "+scores.size()+ " out of "+sets.size()+" models completed.");
+		}
+		
+		//sum the scores
+		double total = 0;
+		for(double score : scores){
+			total += score;
+		}
+		
+		return total / (double) scores.size();
 	}
 	
 	private double testModel(svm_model model, double[] testValues, svm_node[][] testSet){
@@ -64,6 +93,9 @@ public class GridSearchParallel implements GridSearch{
 	}
 	
 	private Map<svm_parameter, Double> computeScores(){
+		//use a new cached thread pool for this, as the crossValidate method adds tasks
+		//to the fixed size thread pool
+		ExecutorService threadCache = Executors.newCachedThreadPool();
 		final Map<svm_parameter, Double> scores = new ConcurrentHashMap<svm_parameter, Double>();
 		List<Callable<Object>> tasks = new ArrayList<Callable<Object>>();
 		for( final double e : ps ){
@@ -82,7 +114,7 @@ public class GridSearchParallel implements GridSearch{
 			}
 		}
 		try {
-			exec.invokeAll(tasks);
+			threadCache.invokeAll(tasks);
 		} catch (InterruptedException e1) {
 			//bad things
 			throw new Error(e1);

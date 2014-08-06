@@ -46,7 +46,7 @@ public class Parse {
 	}
 	
 	public static String usage(){
-		return "Usage: seqsvm Seqs_File Features_File Epsilon_File C_File [Cross_Validation_K] [Terminator_Epsilon]";
+		return "Usage: seqsvm Seqs_File Features_File Epsilon_File C_File [Cross_Validation_K] [Terminator_Epsilon] [Intermediaries_Dir]";
 	}
 	
 	private final List<String> seqs = new ArrayList<String>();
@@ -56,8 +56,9 @@ public class Parse {
 	private final double[] ps;
 	private final double[] cs;
 	private int seqLen;
-	private int k;
-	private double term;
+	private int k = DEFAULT_CROSS_VALIDATION;
+	private double term = DEFAULT_TERMINATION_EPSILON;
+	private File intermediariesDir = null;
 	
 	public Parse(String[] args){
 		if(args.length != 4 && args.length != 5 && args.length != 6){
@@ -69,20 +70,33 @@ public class Parse {
 			kmers = parseInts(args[1]);
 			ps = parseDoubles(args[2]);
 			cs = parseDoubles(args[3]);
-			if(args.length == 6){
+			if(args.length == 7){
 				k = Integer.parseInt(args[4]);
 				term = Double.parseDouble(args[5]);
+				intermediariesDir = new File(args[6]);
+			}else if(args.length == 6){
+				try{
+					k = Integer.parseInt(args[4]);
+					term = Double.parseDouble(args[5]);
+				}catch(Exception e){
+					try{
+						term = Double.parseDouble(args[4]);
+						intermediariesDir = new File(args[5]);
+					} catch (Exception e2){
+						k = Integer.parseInt(args[4]);
+						intermediariesDir = new File(args[5]);
+					}
+				}
 			}else if(args.length == 5){
 				try{
 					k = Integer.parseInt(args[4]);
-					term = DEFAULT_TERMINATION_EPSILON;
 				}catch(Exception e){
-					term = Double.parseDouble(args[4]);
-					k = DEFAULT_CROSS_VALIDATION;
+					try{
+						term = Double.parseDouble(args[4]);
+					} catch (Exception e2){
+						intermediariesDir = new File(args[4]);
+					}
 				}
-			}else{
-				term = DEFAULT_TERMINATION_EPSILON;
-				k = DEFAULT_CROSS_VALIDATION;
 			}
 		} catch(Exception e){
 			System.err.println(usage());
@@ -116,7 +130,7 @@ public class Parse {
 		System.err.println("Total sequences: "+seqs.size());
 		SeqSVMTrainer trainer = new SeqSVMTrainer(seqLen, kmers, alphabet, ps, cs);
 		trainer.setVerbose(true);
-		SeqSVMModel model = trainer.train(seqs, vals, k, new Random(), term);
+		SeqSVMModel model = trainer.train(seqs, vals, k, new Random(), term, intermediariesDir);
 		model.write(System.out);
 	}
 	

@@ -1,5 +1,6 @@
 package bepler.seq.svm;
 
+import java.io.File;
 import java.io.PrintStream;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -8,6 +9,7 @@ import java.util.Random;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+
 import arnaudsj.java.libsvm.svm;
 import arnaudsj.java.libsvm.svm_model;
 import arnaudsj.java.libsvm.svm_node;
@@ -75,7 +77,8 @@ public class SeqSVMTrainer {
 		return nodes;
 	}
 
-	public SeqSVMModel train(final List<String> seqs, final List<Double> vals, int k, Random random, double terminationEpsilon){
+	public SeqSVMModel train(final List<String> seqs, final List<Double> vals, int k, Random random,
+			double terminationEpsilon, File saveIntermediariesTo){
 		if(seqs.size() != vals.size()){
 			throw new RuntimeException("Sequences list and values list must be of the same size.");
 		}
@@ -125,8 +128,8 @@ public class SeqSVMTrainer {
 			if(verbose){
 				System.err.println("Grid searching parameters.");
 			}
-			GridSearch search = new GridSearchParallel(eps, cs, terminationEpsilon, crossValSets);
-			svm_parameter param = search.search();
+			GridSearch search = new GridSearchParallel(eps, cs, terminationEpsilon, crossValSets, builder);
+			svm_parameter param = search.search(saveIntermediariesTo);
 
 			//build a model using the best parameters and all the given data
 			if(verbose){

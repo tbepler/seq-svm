@@ -1,5 +1,10 @@
 package bepler.seq.svm;
 
+import java.io.BufferedOutputStream;
+import java.io.File;
+import java.io.FileNotFoundException;
+import java.io.FileOutputStream;
+import java.io.PrintStream;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
@@ -21,18 +26,22 @@ public class GridSearchParallel implements GridSearch{
 	private final double[] cs;
 	private final double term;
 	private final List<CrossValidationSet> crossValSets;
+	private final FeatureBuilder features;
 	private final ExecutorService exec;
 	
-	public GridSearchParallel(double[] ps, double[] cs, double term, List<CrossValidationSet> crossValSets){
+	public GridSearchParallel(double[] ps, double[] cs, double term,
+			List<CrossValidationSet> crossValSets, FeatureBuilder features){
 		this.ps = ps.clone();
 		this.cs = cs.clone();
 		this.term = term;
 		this.crossValSets = new ArrayList<CrossValidationSet>(crossValSets);
+		this.features = features;
 		this.exec = Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors());
 	}
 	
-	private double crossValidate(List<CrossValidationSet> sets, final svm_parameter param){
-		final Collection<Double> scores = new ArrayList<Double>();
+	private double crossValidate(List<CrossValidationSet> sets, final svm_parameter param, File dir){
+		final List<Double> scores = new ArrayList<Double>();
+		final List<svm_model> models = new ArrayList<svm_model>();
 		Collection<Callable<Object>> tasks = new ArrayList<Callable<Object>>();
 		for(final CrossValidationSet set : sets){
 			tasks.add(new Callable<Object>(){
@@ -44,6 +53,7 @@ public class GridSearchParallel implements GridSearch{
 					svm_model model = svm.svm_train(prob, param);
 					synchronized(scores){
 						scores.add(testModel(model, set.testValues, set.testSet));
+						models.add(model);
 					}
 					return null;
 				}
@@ -61,6 +71,26 @@ public class GridSearchParallel implements GridSearch{
 			//an error occurred in at least one of the model training threads
 			System.err.println("Warning: an error occurred while cross validating parameters: Epsilon="+param.p+" C="+param.C
 					+". Only "+scores.size()+ " out of "+sets.size()+" models completed.");
+		}
+		
+		if(dir != null){
+			if(!dir.exists()){
+				dir.mkdirs();
+			}
+			//write the cross validation models to the directory
+			for( int i = 0 ; i < scores.size() ; ++i ){
+				svm_model model = models.get(i);
+				double score = scores.get(i);
+				String name = "model_eps"+model.param.p+"_C"+model.param.C+
+						"_k"+i+"_score"+score+".txt";
+				File target = new File(dir, name);
+				try {
+					PrintStream out = new PrintStream( new BufferedOutputStream (new FileOutputStream(target)));
+					new SeqSVMModel(features, model).write(out);
+				} catch (FileNotFoundException e) {
+					System.err.println("Error: unable to write file "+target);
+				}
+			}
 		}
 		
 		//sum the scores
@@ -92,7 +122,7 @@ public class GridSearchParallel implements GridSearch{
 		return param;
 	}
 	
-	private Map<svm_parameter, Double> computeScores(){
+	private Map<svm_parameter, Double> computeScores(final File saveIntermediariesTo){
 		//use a new cached thread pool for this, as the crossValidate method adds tasks
 		//to the fixed size thread pool
 		ExecutorService threadCache = Executors.newCachedThreadPool();
@@ -105,7 +135,7 @@ public class GridSearchParallel implements GridSearch{
 					@Override
 					public Object call() throws Exception {
 						svm_parameter param = initParam(e, c, term);
-						double score = crossValidate(crossValSets, param);
+						double score = crossValidate(crossValSets, param, saveIntermediariesTo);
 						scores.put(param, score);
 						return null;
 					}
@@ -123,9 +153,9 @@ public class GridSearchParallel implements GridSearch{
 	}
 
 	@Override
-	public svm_parameter search() {
+	public svm_parameter search(File saveIntermediariesTo) {
 		//build the grid search score table
-		Map<svm_parameter, Double> scores = this.computeScores();
+		Map<svm_parameter, Double> scores = this.computeScores(saveIntermediariesTo);
 		//picks the parameters that produce a model with the lowest
 		//average error
 		svm_parameter best = null;

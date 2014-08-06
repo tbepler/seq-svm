@@ -41,11 +41,12 @@ public class GridSearchParallel implements GridSearch{
 		this.exec = Executors.newFixedThreadPool(n);
 	}
 	
-	private double crossValidate(List<CrossValidationSet> sets, final svm_parameter param, File dir){
+	private double crossValidate(List<CrossValidationSet> sets, final svm_parameter param, final File dir){
 		final List<Double> scores = new ArrayList<Double>();
-		final List<svm_model> models = new ArrayList<svm_model>();
 		Collection<Callable<Object>> tasks = new ArrayList<Callable<Object>>();
+		int i = 0;
 		for(final CrossValidationSet set : sets){
+			final int k = i++;
 			tasks.add(new Callable<Object>(){
 				@Override public Object call() throws Exception {
 					svm_problem prob = new svm_problem();
@@ -53,10 +54,11 @@ public class GridSearchParallel implements GridSearch{
 					prob.y = set.trainValues;
 					prob.x = set.trainSet;
 					svm_model model = svm.svm_train(prob, param);
+					double score = testModel(model, set.testValues, set.testSet);
 					synchronized(scores){
-						scores.add(testModel(model, set.testValues, set.testSet));
-						models.add(model);
+						scores.add(score);
 					}
+					writeModel(dir, score, model, k);
 					return null;
 				}
 			});
@@ -75,25 +77,6 @@ public class GridSearchParallel implements GridSearch{
 					+". Only "+scores.size()+ " out of "+sets.size()+" models completed.");
 		}
 		
-		if(dir != null){
-			if(!dir.exists()){
-				dir.mkdirs();
-			}
-			//write the cross validation models to the directory
-			for( int i = 0 ; i < scores.size() ; ++i ){
-				svm_model model = models.get(i);
-				double score = scores.get(i);
-				String name = "model_eps"+model.param.p+"_C"+model.param.C+
-						"_k"+i+"_score"+score+".txt";
-				File target = new File(dir, name);
-				try {
-					PrintStream out = new PrintStream( new BufferedOutputStream (new FileOutputStream(target)));
-					new SeqSVMModel(features, model).write(out);
-				} catch (FileNotFoundException e) {
-					System.err.println("Error: unable to write file "+target);
-				}
-			}
-		}
 		
 		//sum the scores
 		double total = 0;
@@ -102,6 +85,27 @@ public class GridSearchParallel implements GridSearch{
 		}
 		
 		return total / (double) scores.size();
+	}
+
+	private void writeModel(File dir, double score,
+			svm_model model, int k) {
+		if(dir != null){
+			if(!dir.exists()){
+				dir.mkdirs();
+			}
+			//write the cross validation model to the directory
+			String name = "model_eps"+model.param.p+"_C"+model.param.C+
+					"_k"+k+"_score"+score+".txt";
+			File target = new File(dir, name);
+			try {
+				PrintStream out = new PrintStream( new BufferedOutputStream (new FileOutputStream(target)));
+				new SeqSVMModel(features, model).write(out);
+			} catch (FileNotFoundException e) {
+				synchronized(System.err){
+					System.err.println("Error: unable to write file "+target);
+				}
+			}
+		}
 	}
 	
 	private double testModel(svm_model model, double[] testValues, svm_node[][] testSet){

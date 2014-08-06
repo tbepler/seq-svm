@@ -106,11 +106,14 @@ public class Parse {
 			case THREADS_TAG:
 				nThreads = Integer.parseInt(args[++i]);
 				break;
+			default:
+				System.err.println("Unrecognized flag: "+cur);
+				throw new Exception();
 			}
 		}
 		if(alphabet == null || kmers == null || ps == null || cs == null){
 			System.err.println(usage());
-			throw new Error();
+			throw new Exception();
 		}
 	}
 	

@@ -61,7 +61,7 @@ public class Parse {
 	private File intermediariesDir = null;
 	
 	public Parse(String[] args){
-		if(args.length != 4 && args.length != 5 && args.length != 6){
+		if(args.length < 4 || args.length > 7){
 			System.err.println(usage());
 			throw new Error();
 		}

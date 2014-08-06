@@ -79,10 +79,6 @@ public class Parse {
 	private int nThreads = 1;
 	
 	public Parse(String[] args) throws Exception{
-		if(args.length < 4 || args.length > 7){
-			System.err.println(usage());
-			throw new Error();
-		}
 		for( int i = 0 ; i < args.length ; ++i ){
 			String cur = args[i];
 			switch(cur){
@@ -111,6 +107,10 @@ public class Parse {
 				nThreads = Integer.parseInt(args[++i]);
 				break;
 			}
+		}
+		if(alphabet == null || kmers == null || ps == null || cs == null){
+			System.err.println(usage());
+			throw new Error();
 		}
 	}
 	

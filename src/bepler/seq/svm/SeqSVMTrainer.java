@@ -78,19 +78,20 @@ public class SeqSVMTrainer {
 	}
 
 	public SeqSVMModel train(final List<String> seqs, final List<Double> vals, int k, Random random,
-			double terminationEpsilon, File saveIntermediariesTo){
+			double terminationEpsilon, File saveIntermediariesTo, int nThreads){
 		if(seqs.size() != vals.size()){
 			throw new RuntimeException("Sequences list and values list must be of the same size.");
 		}
 		//redirect stdout to stderr
 		PrintStream sout = System.out;
 		System.setOut(System.err);
-
+		nThreads = nThreads > 0 ? nThreads : Runtime.getRuntime().availableProcessors();
+		
 		try{
-			ExecutorService exec = Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors());
+			ExecutorService exec = Executors.newFixedThreadPool(nThreads);
 
 			if(verbose){
-				System.err.println("Running on "+Runtime.getRuntime().availableProcessors()+" cores.");
+				System.err.println("Running with "+nThreads+" threads.");
 				System.err.println("Extracting sequence features.");
 			}
 			final List<FeaturesValue> shuffle = new ArrayList<FeaturesValue>();
@@ -128,7 +129,8 @@ public class SeqSVMTrainer {
 			if(verbose){
 				System.err.println("Grid searching parameters.");
 			}
-			GridSearch search = new GridSearchParallel(eps, cs, terminationEpsilon, crossValSets, builder);
+			GridSearch search = new GridSearchParallel(eps, cs, terminationEpsilon, crossValSets,
+					builder, nThreads);
 			svm_parameter param = search.search(saveIntermediariesTo);
 
 			//build a model using the best parameters and all the given data

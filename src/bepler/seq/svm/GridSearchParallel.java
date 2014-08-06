@@ -30,13 +30,15 @@ public class GridSearchParallel implements GridSearch{
 	private final ExecutorService exec;
 	
 	public GridSearchParallel(double[] ps, double[] cs, double term,
-			List<CrossValidationSet> crossValSets, FeatureBuilder features){
+			List<CrossValidationSet> crossValSets, FeatureBuilder features,
+			int threads){
 		this.ps = ps.clone();
 		this.cs = cs.clone();
 		this.term = term;
 		this.crossValSets = new ArrayList<CrossValidationSet>(crossValSets);
 		this.features = features;
-		this.exec = Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors());
+		int n = threads > 0 ? threads : Runtime.getRuntime().availableProcessors();
+		this.exec = Executors.newFixedThreadPool(n);
 	}
 	
 	private double crossValidate(List<CrossValidationSet> sets, final svm_parameter param, File dir){

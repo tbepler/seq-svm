@@ -46,61 +46,71 @@ public class Parse {
 	}
 	
 	public static String usage(){
-		return "Usage: seqsvm Seqs_File Features_File Epsilon_File C_File [Cross_Validation_K] [Terminator_Epsilon] [Intermediaries_Dir]";
+		return "Usage: seqsvm "
+				+SEQS_TAG + " SEQS_FILE "
+				+FEATURES_TAG + " FEATURES_FILE "
+				+EPS_TAG + " EPS_FILE "
+				+C_TAG + "C_FILE "
+				+"[ "+K_TAG+" cross_validation ] "
+				+"[ "+TERM_TAG+" terminate_epsilon ] "
+				+"[ "+INTERM_TAG+" intermediary_directory ] "
+				+"[ "+THREADS_TAG+" n_threads ] ";
 	}
+	
+	private static final String SEQS_TAG = "-s";
+	private static final String FEATURES_TAG = "-f";
+	private static final String EPS_TAG = "-e";
+	private static final String C_TAG = "-c";
+	private static final String K_TAG = "-k";
+	private static final String TERM_TAG = "-t";
+	private static final String INTERM_TAG = "-i";
+	private static final String THREADS_TAG = "-n";
 	
 	private final List<String> seqs = new ArrayList<String>();
 	private final List<Double> vals = new ArrayList<Double>();
-	private final char[] alphabet;
-	private final int[] kmers;
-	private final double[] ps;
-	private final double[] cs;
+	private char[] alphabet;
+	private int[] kmers;
+	private double[] ps;
+	private double[] cs;
 	private int seqLen;
 	private int k = DEFAULT_CROSS_VALIDATION;
 	private double term = DEFAULT_TERMINATION_EPSILON;
 	private File intermediariesDir = null;
+	private int nThreads = 1;
 	
-	public Parse(String[] args){
+	public Parse(String[] args) throws Exception{
 		if(args.length < 4 || args.length > 7){
 			System.err.println(usage());
 			throw new Error();
 		}
-		try{
-			alphabet = parseSequences(args[0]);
-			kmers = parseInts(args[1]);
-			ps = parseDoubles(args[2]);
-			cs = parseDoubles(args[3]);
-			if(args.length == 7){
-				k = Integer.parseInt(args[4]);
-				term = Double.parseDouble(args[5]);
-				intermediariesDir = new File(args[6]);
-			}else if(args.length == 6){
-				try{
-					k = Integer.parseInt(args[4]);
-					term = Double.parseDouble(args[5]);
-				}catch(Exception e){
-					try{
-						term = Double.parseDouble(args[4]);
-						intermediariesDir = new File(args[5]);
-					} catch (Exception e2){
-						k = Integer.parseInt(args[4]);
-						intermediariesDir = new File(args[5]);
-					}
-				}
-			}else if(args.length == 5){
-				try{
-					k = Integer.parseInt(args[4]);
-				}catch(Exception e){
-					try{
-						term = Double.parseDouble(args[4]);
-					} catch (Exception e2){
-						intermediariesDir = new File(args[4]);
-					}
-				}
+		for( int i = 0 ; i < args.length ; ++i ){
+			String cur = args[i];
+			switch(cur){
+			case SEQS_TAG:
+				alphabet = parseSequences(args[++i]);
+				break;
+			case FEATURES_TAG:
+				kmers = parseInts(args[++i]);
+				break;
+			case EPS_TAG:
+				ps = parseDoubles(args[++i]);
+				break;
+			case C_TAG:
+				cs = parseDoubles(args[++i]);
+				break;
+			case K_TAG:
+				k = Integer.parseInt(args[++i]);
+				break;
+			case TERM_TAG:
+				term = Double.parseDouble(args[++i]);
+				break;
+			case INTERM_TAG:
+				intermediariesDir = new File(args[++i]);
+				break;
+			case THREADS_TAG:
+				nThreads = Integer.parseInt(args[++i]);
+				break;
 			}
-		} catch(Exception e){
-			System.err.println(usage());
-			throw new Error(e);
 		}
 	}
 	
@@ -130,7 +140,7 @@ public class Parse {
 		System.err.println("Total sequences: "+seqs.size());
 		SeqSVMTrainer trainer = new SeqSVMTrainer(seqLen, kmers, alphabet, ps, cs);
 		trainer.setVerbose(true);
-		SeqSVMModel model = trainer.train(seqs, vals, k, new Random(), term, intermediariesDir);
+		SeqSVMModel model = trainer.train(seqs, vals, k, new Random(), term, intermediariesDir, nThreads);
 		model.write(System.out);
 	}
 	

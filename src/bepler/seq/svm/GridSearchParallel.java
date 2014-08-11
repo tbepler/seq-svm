@@ -97,12 +97,17 @@ public class GridSearchParallel implements GridSearch{
 			String name = "model_eps"+model.param.p+"_C"+model.param.C+
 					"_k"+k+"_score"+score+".txt";
 			File target = new File(dir, name);
+			PrintStream out = null;
 			try {
-				PrintStream out = new PrintStream( new BufferedOutputStream (new FileOutputStream(target)));
+				out = new PrintStream( new BufferedOutputStream (new FileOutputStream(target)));
 				new SeqSVMModel(features, model).write(out);
 			} catch (FileNotFoundException e) {
 				synchronized(System.err){
 					System.err.println("Error: unable to write file "+target);
+				}
+			} finally {
+				if(out != null){
+					out.close();
 				}
 			}
 		}

@@ -1,6 +1,7 @@
 package bepler.seq.svm;
 
 import java.io.PrintStream;
+import java.util.Arrays;
 
 import arnaudsj.java.libsvm.svm;
 import arnaudsj.java.libsvm.svm_model;
@@ -30,10 +31,21 @@ public class SeqSVMModel {
 	}
 	
 	public void write(PrintStream out){
-		double[] weights = this.getWeights();
+		double[] svWeights = this.getWeights();
 		Feature[] features = this.getFeatures();
-		for( int i = 0 ; i < weights.length ; ++i ){
-			out.println(features[i]+" : "+weights[i]);
+		out.println("#SV = "+svWeights.length);
+		double[] featureWeights = new double[features.length];
+		Arrays.fill(featureWeights, 0);
+		for( int i = 0 ; i < model.SV.length ; ++i ){
+			svm_node[] sv = model.SV[i];
+			double svW = svWeights[i];
+			for( int j = 0 ; j < sv.length ; ++j ){
+				double weight = sv[j].value;
+				featureWeights[j] += svW * weight;
+			}
+		}
+		for( int i = 0 ; i < featureWeights.length ; ++i ){
+			out.println(features[i]+" : "+featureWeights[i]);
 		}
 	}
 

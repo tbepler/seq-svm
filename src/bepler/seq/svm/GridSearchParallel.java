@@ -14,6 +14,8 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
+import org.apache.commons.math3.stat.correlation.PearsonsCorrelation;
+
 import arnaudsj.java.libsvm.svm;
 import arnaudsj.java.libsvm.svm_model;
 import arnaudsj.java.libsvm.svm_node;
@@ -41,8 +43,8 @@ public class GridSearchParallel implements GridSearch{
 		this.exec = Executors.newFixedThreadPool(n);
 	}
 	
-	private double crossValidate(List<CrossValidationSet> sets, final svm_parameter param, final File dir){
-		final List<Double> scores = new ArrayList<Double>();
+	private Result crossValidate(List<CrossValidationSet> sets, final svm_parameter param, final File dir){
+		final List<Result> scores = new ArrayList<Result>();
 		Collection<Callable<Object>> tasks = new ArrayList<Callable<Object>>();
 		int i = 0;
 		for(final CrossValidationSet set : sets){
@@ -54,11 +56,11 @@ public class GridSearchParallel implements GridSearch{
 					prob.y = set.trainValues;
 					prob.x = set.trainSet;
 					svm_model model = svm.svm_train(prob, param);
-					double score = testModel(model, set.testValues, set.testSet);
+					Result r = testModel(model, set.testValues, set.testSet);
 					synchronized(scores){
-						scores.add(score);
+						scores.add(r);
 					}
-					writeModel(dir, score, model, k);
+					writeModel(dir, r, model, k);
 					return null;
 				}
 			});
@@ -79,15 +81,21 @@ public class GridSearchParallel implements GridSearch{
 		
 		
 		//sum the scores
-		double total = 0;
-		for(double score : scores){
-			total += score;
+		Result mean = new Result();
+		mean.mse = 0;
+		mean.r2 = 0;
+		for(Result score : scores){
+			mean.mse += score.mse;
+			mean.r2 += score.r2;
 		}
 		
-		return total / (double) scores.size();
+		mean.mse = mean.mse / (double) scores.size();
+		mean.r2 = mean.r2 / (double) scores.size();
+		
+		return mean;
 	}
 
-	private void writeModel(File dir, double score,
+	private void writeModel(File dir, Result r,
 			svm_model model, int k) {
 		if(dir != null){
 			if(!dir.exists()){
@@ -95,7 +103,7 @@ public class GridSearchParallel implements GridSearch{
 			}
 			//write the cross validation model to the directory
 			String name = "model_eps"+model.param.p+"_C"+model.param.C+
-					"_k"+k+"_score"+score+".txt";
+					"_k"+k+"_mse-"+r.mse+"_r2-"+r.r2+".txt";
 			File target = new File(dir, name);
 			PrintStream out = null;
 			try {
@@ -113,14 +121,36 @@ public class GridSearchParallel implements GridSearch{
 		}
 	}
 	
-	private double testModel(svm_model model, double[] testValues, svm_node[][] testSet){
-		double score = 0;
+	private Result testModel(svm_model model, double[] testValues, svm_node[][] testSet){
+		double[] predictValues = new double[testValues.length];
 		for( int i = 0 ; i < testValues.length ; ++i ){
-			//the error is the difference between the predicted value and the actual value
-			double err = Math.abs(svm.svm_predict(model, testSet[i]) - testValues[i]);
-			score += err;
+			predictValues[i] = svm.svm_predict(model, testSet[i]) ;
 		}
-		return score / (double) testValues.length;
+		Result r = new Result();
+		PearsonsCorrelation cor = new PearsonsCorrelation();
+		r.r2 = Math.pow(cor.correlation(testValues, predictValues), 2);
+		r.mse = meanSquaredError(testValues, predictValues);
+		return r;
+	}
+	
+	private static double meanSquaredError(double[] x, double[] y){
+		double mse = 0;
+		for( int i = 0 ; i < x.length ; ++i ){
+			mse += Math.pow(x[i] - y[i], 2);
+		}
+		return mse / (double) x.length;
+	}
+	
+	private static class Result implements Comparable<Result>{
+		private double r2;
+		private double mse;
+		@Override
+		public int compareTo(Result arg0) {
+			double dif = mse - arg0.mse;
+			if(dif < 0) return -1;
+			if(dif > 0) return 1;
+			return 0;
+		}
 	}
 	
 	private svm_parameter initParam(double p, double c, double termEps){
@@ -133,11 +163,11 @@ public class GridSearchParallel implements GridSearch{
 		return param;
 	}
 	
-	private Map<svm_parameter, Double> computeScores(final File saveIntermediariesTo){
+	private Map<svm_parameter, Result> computeScores(final File saveIntermediariesTo){
 		//use a new cached thread pool for this, as the crossValidate method adds tasks
 		//to the fixed size thread pool
 		ExecutorService threadCache = Executors.newCachedThreadPool();
-		final Map<svm_parameter, Double> scores = new ConcurrentHashMap<svm_parameter, Double>();
+		final Map<svm_parameter, Result> scores = new ConcurrentHashMap<svm_parameter, Result>();
 		List<Callable<Object>> tasks = new ArrayList<Callable<Object>>();
 		for( final double e : ps ){
 			for( final double c : cs	){
@@ -146,7 +176,7 @@ public class GridSearchParallel implements GridSearch{
 					@Override
 					public Object call() throws Exception {
 						svm_parameter param = initParam(e, c, term);
-						double score = crossValidate(crossValSets, param, saveIntermediariesTo);
+						Result score = crossValidate(crossValSets, param, saveIntermediariesTo);
 						scores.put(param, score);
 						return null;
 					}
@@ -166,14 +196,16 @@ public class GridSearchParallel implements GridSearch{
 	@Override
 	public svm_parameter search(File saveIntermediariesTo) {
 		//build the grid search score table
-		Map<svm_parameter, Double> scores = this.computeScores(saveIntermediariesTo);
+		Map<svm_parameter, Result> scores = this.computeScores(saveIntermediariesTo);
 		//picks the parameters that produce a model with the lowest
 		//average error
 		svm_parameter best = null;
-		double bestScore = Double.POSITIVE_INFINITY;
+		Result bestScore = new Result();
+		bestScore.mse = Double.POSITIVE_INFINITY;
+		bestScore.r2 = 0;
 		for(svm_parameter param : scores.keySet()){
-			double score = scores.get(param);
-			if(score < bestScore){
+			Result score = scores.get(param);
+			if(score.compareTo(bestScore) < 0){
 				bestScore = score;
 				best = param;
 			}

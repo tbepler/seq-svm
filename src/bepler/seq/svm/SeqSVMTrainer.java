@@ -77,7 +77,7 @@ public class SeqSVMTrainer {
 		return nodes;
 	}
 
-	public SeqSVMModel train(final List<String> seqs, final List<Double> vals, int k, Random random,
+	public LinearModel train(final List<String> seqs, final List<Double> vals, int k, Random random,
 			double terminationEpsilon, File saveIntermediariesTo, int nThreads){
 		if(seqs.size() != vals.size()){
 			throw new RuntimeException("Sequences list and values list must be of the same size.");

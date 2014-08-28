@@ -1,13 +1,12 @@
 package bepler.seq.svm;
 
-import java.io.PrintStream;
 import java.util.Arrays;
 
 import arnaudsj.java.libsvm.svm;
 import arnaudsj.java.libsvm.svm_model;
 import arnaudsj.java.libsvm.svm_node;
 
-public class SeqSVMModel {
+public class SeqSVMModel extends LinearModel {
 	
 	private final FeatureBuilder builder;
 	private final svm_model model;
@@ -17,24 +16,21 @@ public class SeqSVMModel {
 		this.model = model;
 	}
 	
+	@Override
 	public double predict(String seq){
 		svm_node[] nodes = SeqSVMTrainer.extractFeatures(builder, seq);
 		return svm.svm_predict(model, nodes);
 	}
 	
+	@Override
 	public Feature[] getFeatures(){
 		return builder.getFeatures();
 	}
 	
+	@Override
 	public double[] getWeights(){
-		return model.sv_coef[0];
-	}
-	
-	public void write(PrintStream out){
-		double[] svWeights = this.getWeights();
-		Feature[] features = this.getFeatures();
-		out.println("#SV = "+svWeights.length);
-		double[] featureWeights = new double[features.length];
+		double[] svWeights = model.sv_coef[0];
+		double[] featureWeights = new double[getFeatures().length];
 		Arrays.fill(featureWeights, 0);
 		for( int i = 0 ; i < model.SV.length ; ++i ){
 			svm_node[] sv = model.SV[i];
@@ -44,9 +40,12 @@ public class SeqSVMModel {
 				featureWeights[j] += svW * weight;
 			}
 		}
-		for( int i = 0 ; i < featureWeights.length ; ++i ){
-			out.println(features[i]+" : "+featureWeights[i]);
-		}
+		return featureWeights;
+	}
+
+	@Override
+	public double intercept() {
+		return -model.rho[0];
 	}
 
 }

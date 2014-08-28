@@ -13,7 +13,7 @@ import java.util.Random;
 import java.util.Scanner;
 import java.util.Set;
 
-public class Parse {
+public class Train implements Module {
 
 	public static final double DEFAULT_TERMINATION_EPSILON = 0.01;
 	public static final int DEFAULT_CROSS_VALIDATION = 5;
@@ -45,18 +45,6 @@ public class Parse {
 		return array;
 	}
 	
-	public static String usage(){
-		return "Usage: seqsvm "
-				+SEQS_TAG + " SEQS_FILE "
-				+FEATURES_TAG + " FEATURES_FILE "
-				+EPS_TAG + " EPS_FILE "
-				+C_TAG + "C_FILE "
-				+"[ "+K_TAG+" cross_validation ] "
-				+"[ "+TERM_TAG+" terminate_epsilon ] "
-				+"[ "+INTERM_TAG+" intermediary_directory ] "
-				+"[ "+THREADS_TAG+" n_threads ] ";
-	}
-	
 	private static final String SEQS_TAG = "-s";
 	private static final String FEATURES_TAG = "-f";
 	private static final String EPS_TAG = "-e";
@@ -78,7 +66,37 @@ public class Parse {
 	private File intermediariesDir = null;
 	private int nThreads = 1;
 	
-	public Parse(String[] args) throws Exception{
+	private String arrayToString(double[] array){
+		String s = "";
+		for(double d : array){
+			s += d + " ";
+		}
+		return s;
+	}
+	
+	private String arrayToString(int[] array){
+		String s = "";
+		for(int i : array){
+			s += i + " ";
+		}
+		return s;
+	}
+	
+	@Override
+	public String usage(){
+		return "Usage: train "
+				+SEQS_TAG + " SEQS_FILE "
+				+FEATURES_TAG + " FEATURES_FILE "
+				+EPS_TAG + " EPS_FILE "
+				+C_TAG + "C_FILE "
+				+"[ "+K_TAG+" cross_validation ] "
+				+"[ "+TERM_TAG+" terminate_epsilon ] "
+				+"[ "+INTERM_TAG+" intermediary_directory ] "
+				+"[ "+THREADS_TAG+" n_threads ] ";
+	}
+	
+	@Override
+	public void setArgs(String[] args) throws Exception{
 		for( int i = 0 ; i < args.length ; ++i ){
 			String cur = args[i];
 			switch(cur){
@@ -112,27 +130,11 @@ public class Parse {
 			}
 		}
 		if(alphabet == null || kmers == null || ps == null || cs == null){
-			System.err.println(usage());
 			throw new Exception();
 		}
 	}
 	
-	private String arrayToString(double[] array){
-		String s = "";
-		for(double d : array){
-			s += d + " ";
-		}
-		return s;
-	}
-	
-	private String arrayToString(int[] array){
-		String s = "";
-		for(int i : array){
-			s += i + " ";
-		}
-		return s;
-	}
-	
+	@Override
 	public void execute(){
 		System.err.println("Building model for kmers: "+arrayToString(kmers));
 		System.err.println("Using epsilons: "+arrayToString(ps));
@@ -143,7 +145,7 @@ public class Parse {
 		System.err.println("Total sequences: "+seqs.size());
 		SeqSVMTrainer trainer = new SeqSVMTrainer(seqLen, kmers, alphabet, ps, cs);
 		trainer.setVerbose(true);
-		SeqSVMModel model = trainer.train(seqs, vals, k, new Random(), term, intermediariesDir, nThreads);
+		LinearModel model = trainer.train(seqs, vals, k, new Random(), term, intermediariesDir, nThreads);
 		model.write(System.out);
 	}
 	

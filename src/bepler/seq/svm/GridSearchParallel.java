@@ -16,6 +16,7 @@ import java.util.concurrent.Executors;
 
 import org.apache.commons.math3.stat.correlation.PearsonsCorrelation;
 
+import bepler.util.StatsUtil;
 import arnaudsj.java.libsvm.svm;
 import arnaudsj.java.libsvm.svm_model;
 import arnaudsj.java.libsvm.svm_node;
@@ -129,17 +130,11 @@ public class GridSearchParallel implements GridSearch{
 		Result r = new Result();
 		PearsonsCorrelation cor = new PearsonsCorrelation();
 		r.r2 = Math.pow(cor.correlation(testValues, predictValues), 2);
-		r.mse = meanSquaredError(testValues, predictValues);
+		r.mse = StatsUtil.meanSquaredError(testValues, predictValues);
 		return r;
 	}
 	
-	private static double meanSquaredError(double[] x, double[] y){
-		double mse = 0;
-		for( int i = 0 ; i < x.length ; ++i ){
-			mse += Math.pow(x[i] - y[i], 2);
-		}
-		return mse / (double) x.length;
-	}
+
 	
 	private static class Result implements Comparable<Result>{
 		private double r2;

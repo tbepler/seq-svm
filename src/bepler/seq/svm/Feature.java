@@ -4,6 +4,19 @@ import java.util.Arrays;
 
 public class Feature {
 	
+	public static final String FEATURE_REGEX = "\\s*\\[\\s*\\d+\\s*\\]\\s*[a-zA-Z]+\\s*";
+	
+	public static Feature parseFeature(String s){
+		if(s.matches(FEATURE_REGEX)){
+			int oBracket = s.indexOf('[');
+			int cBracket = s.indexOf(']');
+			int index = Integer.parseInt(s.substring(oBracket + 1, cBracket).trim());
+			String kmer = s.substring(cBracket+1).trim();
+			return new Feature(kmer, index);
+		}
+		throw new IllegalArgumentException("Cannot parse Feature from string: "+s);
+	}
+	
 	private final String kmer;
 	private final int index;
 	
